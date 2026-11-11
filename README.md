@@ -47,6 +47,8 @@ Jira Mock、GitHub Mock 和 Slack Mock 的 API 文档分别位于 <http://localh
 
 阅读 [事务发件箱与 Jira](docs/jira-adapter-lesson.md) 和 [GitHub、Slack 适配器](docs/github-adapter-lesson.md)，理解 provider 与通知渠道的职责边界、幂等同步及失败重试。
 
+面试准备可阅读 [项目面试作战手册](docs/interview-playbook.md)。它把学习过程整理成一分钟介绍、三分钟架构说明、刁钻追问、故障演练、现场演示和简历表述，并明确区分当前 demo 能力与真正生产化还需补齐的部分。
+
 ### 防止重复创建工单
 
 聊天与 `POST /v1/tickets` 请求都使用 `Idempotency-Key`。前端为每条用户消息生成唯一 ID 并把它作为幂等键；网络超时后，使用相同键和相同内容重试会返回原工单，使用相同键提交不同内容会得到 `409 Conflict`。幂等键按租户隔离；只有在确实要新建另一张工单时才使用新键。该机制保护写操作，不缓存模型回答。
