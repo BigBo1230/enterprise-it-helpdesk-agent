@@ -8,7 +8,10 @@ from ai_agent_template.core.settings import Settings
 
 
 def build_embeddings(settings: Settings) -> Embeddings:
-    return FastEmbedEmbeddings(model_name=settings.rag_embedding_model_name)
+    return FastEmbedEmbeddings(
+        model_name=settings.rag_embedding_model_name,
+        cache_dir=settings.rag_embedding_cache_path,
+    )
 
 
 def build_qdrant_client(settings: Settings) -> QdrantClient:

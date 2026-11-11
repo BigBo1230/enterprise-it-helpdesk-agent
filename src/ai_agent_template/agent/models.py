@@ -23,3 +23,14 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
                 timeout=settings.model_timeout_seconds,
                 max_retries=settings.model_max_retries,
             )
+        case "bailian":
+            if not settings.bailian_api_key or not settings.bailian_base_url:
+                raise ValueError("BAILIAN_API_KEY and AI_AGENT_BAILIAN_BASE_URL are required")
+            return ChatOpenAI(
+                api_key=settings.bailian_api_key,
+                base_url=settings.bailian_base_url,
+                model=settings.model_name,
+                temperature=settings.model_temperature,
+                timeout=settings.model_timeout_seconds,
+                max_retries=settings.model_max_retries,
+            )

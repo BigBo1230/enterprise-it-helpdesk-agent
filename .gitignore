@@ -8,6 +8,9 @@
 .ruff_cache/
 .venv/
 .qdrant/
+*.sqlite
+*.sqlite3
+*.db
 node_modules/
 __pycache__/
 *.egg-info/

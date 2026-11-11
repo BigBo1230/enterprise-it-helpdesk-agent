@@ -20,10 +20,12 @@ import { Button } from "@/components/ui/button";
 import { MarkdownMessage } from "@/components/markdown-message";
 import {
   API_BASE_URL,
+  getApiKey,
   getReadiness,
   ingestFile,
   ingestText,
   searchRag,
+  setApiKey,
   streamAgent,
   type RagSource,
 } from "@/lib/api";
@@ -37,10 +39,10 @@ type Message = {
 };
 
 const examples = [
-  "Create a production launch checklist for this agent.",
-  "What observability should I add before going live?",
-  "Design a tool-calling roadmap for a SaaS support agent.",
-  "Humanize this draft in my voice: Dear customer, your request has been processed successfully.",
+  "员工忘记密码应该怎么处理？",
+  "VPN 报错 VPN-403，请帮我排查。",
+  "请帮我创建一个 VPN 故障工单，错误码 VPN-403，影响远程办公。",
+  "整个办公室都无法连接 VPN，应该如何处理？",
 ];
 
 function createId() {
@@ -50,7 +52,13 @@ function createId() {
 export default function App() {
   const queryClient = useQueryClient();
   const [threadId, setThreadId] = useState("demo-thread");
+  const [tenantKey, setTenantKey] = useState(getApiKey());
   const [streaming, setStreaming] = useState(false);
+  const [failedRequest, setFailedRequest] = useState<{
+    message: string;
+    thread_id?: string;
+    idempotency_key: string;
+  } | null>(null);
   const [draft, setDraft] = useState(examples[0]);
   const [knowledgeSource, setKnowledgeSource] = useState("manual-note");
   const [knowledgeText, setKnowledgeText] = useState("");
@@ -61,7 +69,7 @@ export default function App() {
     {
       id: createId(),
       role: "agent",
-      content: "Ready. Point me at the thing you want this agent to reason through.",
+      content: "你好，我可以查询 IT 制度、协助排障，并创建或查询工单。",
     },
   ]);
 
@@ -72,12 +80,16 @@ export default function App() {
     retry: false,
   });
 
-  const runStream = async (input: { message: string; thread_id?: string }) => {
+  const runStream = async (input: { message: string; thread_id?: string; idempotency_key: string }) => {
     const responseId = createId();
     setStreaming(true);
     setMessages((current) => [...current, { id: responseId, role: "agent", content: "" }]);
     try {
-      for await (const event of streamAgent(input)) {
+      let completed = false;
+      for await (const event of streamAgent(
+        { message: input.message, thread_id: input.thread_id },
+        { idempotencyKey: input.idempotency_key },
+      )) {
         if (event.type === "delta") {
           setMessages((current) =>
             current.map((message) =>
@@ -92,9 +104,14 @@ export default function App() {
               message.id === responseId ? { ...message, sources: event.sources } : message,
             ),
           );
+        } else if (event.type === "done") {
+          completed = true;
         }
       }
+      if (!completed) throw new Error("The connection ended before the response completed.");
+      setFailedRequest(null);
     } catch (error) {
+      setFailedRequest(input);
       toast.error("Agent request failed", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
@@ -163,9 +180,11 @@ export default function App() {
     const message = draft.trim();
     if (!message || streaming) return;
 
-    setMessages((current) => [...current, { id: createId(), role: "user", content: message }]);
+    const messageId = createId();
+    setFailedRequest(null);
+    setMessages((current) => [...current, { id: messageId, role: "user", content: message }]);
     setDraft("");
-    void runStream({ message, thread_id: threadId || undefined });
+    void runStream({ message, thread_id: threadId || undefined, idempotency_key: messageId });
   }
 
   async function copyTranscript() {
@@ -187,11 +206,28 @@ export default function App() {
                   <Bot className="size-5" aria-hidden="true" />
                 </div>
                 <div>
-                  <h1 className="text-base font-semibold tracking-normal">AI Agent Console</h1>
-                  <p className="text-sm text-zinc-500">FastAPI + LangChain + LangGraph</p>
+                  <h1 className="text-base font-semibold tracking-normal">Enterprise IT Helpdesk</h1>
+                  <p className="text-sm text-zinc-500">RAG + Ticket Agent + Multi-tenant</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <input
+                  aria-label="Tenant API key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="Tenant API key"
+                  value={tenantKey}
+                  disabled={streaming || textIngestion.isPending || fileIngestion.isPending || ragSearch.isPending}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setTenantKey(value);
+                    setApiKey(value);
+                    setMessages([]);
+                    setSearchResults([]);
+                    setFailedRequest(null);
+                  }}
+                  className="h-8 w-40 rounded-md border border-zinc-200 px-2 text-xs"
+                />
                 <span
                   className={cn(
                     "inline-flex h-8 items-center gap-2 rounded-md border px-3 text-xs font-medium",
@@ -239,7 +275,19 @@ export default function App() {
                         <MarkdownMessage content={message.content} />
                       </div>
                     ) : (
-                      <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                      <>
+                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                        {failedRequest?.idempotency_key === message.id ? (
+                          <button
+                            type="button"
+                            disabled={streaming}
+                            onClick={() => void runStream(failedRequest)}
+                            className="mt-2 text-xs font-semibold underline decoration-white/60 underline-offset-2 disabled:opacity-60"
+                          >
+                            Retry same request safely
+                          </button>
+                        ) : null}
+                      </>
                     )}
                     {message.sources?.length ? (
                       <div className="mt-3 border-t border-zinc-200 pt-3">

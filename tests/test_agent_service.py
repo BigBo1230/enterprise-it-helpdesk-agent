@@ -10,14 +10,18 @@ from ai_agent_template.rag.schemas import RagSource
 
 
 class FakeGraph:
+    def __init__(self) -> None:
+        self.last_input: dict[str, Any] | None = None
+
     async def ainvoke(
         self,
         input: dict[str, Any],  # noqa: A002 - match LangGraph/LangChain runnable API.
         config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        self.last_input = input
         assert input["messages"][0].content == "hello"
-        assert config == {"configurable": {"thread_id": "thread-1"}}
+        assert config == {"configurable": {"thread_id": "demo:thread-1"}}
         return {"messages": [*input["messages"], AIMessage(content="world")], "sources": []}
 
     async def astream(
@@ -43,6 +47,24 @@ async def test_agent_service_invokes_graph() -> None:
     assert response.message == "world"
     assert response.thread_id == "thread-1"
     assert response.sources == []
+
+
+@pytest.mark.asyncio
+async def test_agent_service_carries_request_context_into_graph() -> None:
+    graph = FakeGraph()
+    service = AgentService(graph)
+
+    await service.invoke(
+        AgentInvokeRequest(message="hello", thread_id="thread-1"),
+        tenant_id="demo",
+        idempotency_key="stable-operation-key",
+        request_id="http-request-123",
+    )
+
+    assert graph.last_input is not None
+    assert graph.last_input["tenant_id"] == "demo"
+    assert graph.last_input["idempotency_key"] == "stable-operation-key"
+    assert graph.last_input["request_id"] == "http-request-123"
 
 
 @pytest.mark.asyncio

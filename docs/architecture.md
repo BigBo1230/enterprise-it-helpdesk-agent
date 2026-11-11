@@ -92,15 +92,15 @@ Spans no-op safely when tracing is disabled (the OTEL API returns a no-op tracer
 `frontend/` is a separate React/Vite app. It:
 
 - Calls `streamAgent` against `POST /v1/agent/stream` and renders token deltas live with sources rendered as soon as the `sources` event arrives.
-- Sends `x-api-key` from `VITE_API_KEY` when present (matches the backend auth dependency).
+- Sends `x-api-key` from the tenant key entered in the UI. The browser keeps it in `sessionStorage`, so it is cleared when that browser session ends.
 - Parses error envelopes (`detail` / `title`) for toast messages.
 - Invalidates the retrieval query cache after ingestion so freshly added knowledge is searchable on the next test query.
 
-Configure with `VITE_API_BASE_URL` and `VITE_API_KEY`.
+Configure the backend address with `VITE_API_BASE_URL`; enter the tenant key at runtime in the UI.
 
 ## Model Providers
 
-`AI_AGENT_MODEL_PROVIDER` selects between Groq and OpenAI. Groq is the default for fast, low-friction local trials; OpenAI is available for teams that want frontier models. The factory in `agent/models.py` is the single extension point — add other providers there.
+`AI_AGENT_MODEL_PROVIDER` selects Groq, OpenAI, or Alibaba Bailian. Bailian uses its OpenAI-compatible endpoint, so the same LangChain client contract can be reused. The factory in `agent/models.py` is the single extension point for additional providers.
 
 ## Evaluation
 

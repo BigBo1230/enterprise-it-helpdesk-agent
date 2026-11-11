@@ -1,0 +1,4 @@
+{"id":"vpn-angry-user","query":"VPN 又报 VPN-403 了，今天只有我连不上。先告诉我该怎么排查，暂时别开单。","relevant_sources":["sample-it-handbook.md"]}
+{"id":"password-new-hire","query":"新员工账号密码忘了，统一身份平台一直验证不过，IT 能怎么处理？","relevant_sources":["it-policy-v1","sample-it-handbook.md"]}
+{"id":"laptop-repair-natural","query":"办公笔记本键盘坏了要报修，服务台要我先提供哪些信息？","relevant_sources":["sample-it-handbook.md"]}
+{"id":"unsupported-scanner-code","query":"公司旧款扫描仪显示 X500 错误码，应该按什么步骤清除？","relevant_sources":[]}

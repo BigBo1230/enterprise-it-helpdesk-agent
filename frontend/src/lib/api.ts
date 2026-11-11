@@ -27,10 +27,20 @@ export type RagSearchResponse = {
 };
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-export const API_KEY = import.meta.env.VITE_API_KEY ?? "";
+let apiKey = sessionStorage.getItem("helpdesk-api-key") ?? "";
+
+export function getApiKey(): string {
+  return apiKey;
+}
+
+export function setApiKey(value: string): void {
+  apiKey = value.trim();
+  if (apiKey) sessionStorage.setItem("helpdesk-api-key", apiKey);
+  else sessionStorage.removeItem("helpdesk-api-key");
+}
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  return API_KEY ? { ...extra, "x-api-key": API_KEY } : extra;
+  return apiKey ? { ...extra, "x-api-key": apiKey } : extra;
 }
 
 export type StreamEvent =
@@ -49,14 +59,21 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 }
 
-export async function invokeAgent(request: AgentInvokeRequest): Promise<AgentInvokeResponse> {
+export async function invokeAgent(
+  request: AgentInvokeRequest,
+  options: { idempotencyKey: string; signal?: AbortSignal },
+): Promise<AgentInvokeResponse> {
   let response: Response;
 
   try {
     response = await fetch(`${API_BASE_URL}/v1/agent/invoke`, {
       method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: authHeaders({
+        "Content-Type": "application/json",
+        "Idempotency-Key": options.idempotencyKey,
+      }),
       body: JSON.stringify(request),
+      signal: options.signal,
     });
   } catch (error) {
     throw new Error(
@@ -72,11 +89,15 @@ export async function invokeAgent(request: AgentInvokeRequest): Promise<AgentInv
 
 export async function* streamAgent(
   request: AgentInvokeRequest,
-  options: { signal?: AbortSignal } = {},
+  options: { idempotencyKey: string; signal?: AbortSignal },
 ): AsyncGenerator<StreamEvent, void, void> {
   const response = await fetch(`${API_BASE_URL}/v1/agent/stream`, {
     method: "POST",
-    headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
+    headers: authHeaders({
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "Idempotency-Key": options.idempotencyKey,
+    }),
     body: JSON.stringify(request),
     signal: options.signal,
   });

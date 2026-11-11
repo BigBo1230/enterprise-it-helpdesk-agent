@@ -5,16 +5,115 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    volumes:
+      - ticket_data:/data
     environment:
       AI_AGENT_ENVIRONMENT: local
       AI_AGENT_QDRANT_URL: http://qdrant:6333
+      AI_AGENT_TICKET_DB_PATH: /data/tickets.sqlite3
+      AI_AGENT_TICKET_BACKEND: ${AI_AGENT_TICKET_BACKEND:-jira_mock}
+      AI_AGENT_JIRA_BASE_URL: http://jira-mock:8090
+      AI_AGENT_JIRA_API_TOKEN: ${AI_AGENT_JIRA_API_TOKEN:-mock-jira-dev-token}
+      AI_AGENT_JIRA_PROJECT_KEY: ${AI_AGENT_JIRA_PROJECT_KEY:-HELP}
+      AI_AGENT_GITHUB_BASE_URL: http://github-mock:8091
+      AI_AGENT_GITHUB_API_TOKEN: ${AI_AGENT_GITHUB_API_TOKEN:-mock-github-dev-token}
+      AI_AGENT_GITHUB_OWNER: ${AI_AGENT_GITHUB_OWNER:-demo-org}
+      AI_AGENT_GITHUB_REPO: ${AI_AGENT_GITHUB_REPO:-it-helpdesk}
+      AI_AGENT_SLACK_NOTIFICATIONS_ENABLED: ${AI_AGENT_SLACK_NOTIFICATIONS_ENABLED:-true}
+      AI_AGENT_SLACK_MOCK_BASE_URL: http://slack-mock:8092
+      AI_AGENT_SLACK_MOCK_API_TOKEN: ${AI_AGENT_SLACK_MOCK_API_TOKEN:-mock-slack-dev-token}
+      AI_AGENT_SLACK_MOCK_CHANNEL: ${AI_AGENT_SLACK_MOCK_CHANNEL:-it-helpdesk}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
       interval: 30s
       timeout: 5s
       retries: 3
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
+      jira-mock:
+        condition: service_healthy
+      github-mock:
+        condition: service_healthy
+      slack-mock:
+        condition: service_healthy
+
+  jira-mock:
+    build: .
+    command: ["uv", "run", "--no-sync", "uvicorn", "ai_agent_template.mock_jira.main:app", "--host", "0.0.0.0", "--port", "8090"]
+    ports:
+      - "8090:8090"
+    environment:
+      MOCK_JIRA_DB_PATH: /data/jira_mock.sqlite3
+      MOCK_JIRA_API_TOKEN: ${AI_AGENT_JIRA_API_TOKEN:-mock-jira-dev-token}
+    volumes:
+      - jira_mock_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  github-mock:
+    build: .
+    command: ["uv", "run", "--no-sync", "uvicorn", "ai_agent_template.mock_github.main:app", "--host", "0.0.0.0", "--port", "8091"]
+    ports:
+      - "8091:8091"
+    environment:
+      MOCK_GITHUB_DB_PATH: /data/github_mock.sqlite3
+      MOCK_GITHUB_API_TOKEN: ${AI_AGENT_GITHUB_API_TOKEN:-mock-github-dev-token}
+    volumes:
+      - github_mock_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  slack-mock:
+    build: .
+    command: ["uv", "run", "--no-sync", "uvicorn", "ai_agent_template.mock_slack_app:app", "--host", "0.0.0.0", "--port", "8092"]
+    ports:
+      - "8092:8092"
+    environment:
+      MOCK_SLACK_DB_PATH: /data/slack_mock.sqlite3
+      MOCK_SLACK_API_TOKEN: ${AI_AGENT_SLACK_MOCK_API_TOKEN:-mock-slack-dev-token}
+    volumes:
+      - slack_mock_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8092/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ticket-worker:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "-m", "ai_agent_template.tickets.worker"]
+    env_file:
+      - .env
+    environment:
+      AI_AGENT_TICKET_DB_PATH: /data/tickets.sqlite3
+      AI_AGENT_JIRA_BASE_URL: http://jira-mock:8090
+      AI_AGENT_JIRA_API_TOKEN: ${AI_AGENT_JIRA_API_TOKEN:-mock-jira-dev-token}
+      AI_AGENT_JIRA_PROJECT_KEY: ${AI_AGENT_JIRA_PROJECT_KEY:-HELP}
+      AI_AGENT_GITHUB_BASE_URL: http://github-mock:8091
+      AI_AGENT_GITHUB_API_TOKEN: ${AI_AGENT_GITHUB_API_TOKEN:-mock-github-dev-token}
+      AI_AGENT_GITHUB_OWNER: ${AI_AGENT_GITHUB_OWNER:-demo-org}
+      AI_AGENT_GITHUB_REPO: ${AI_AGENT_GITHUB_REPO:-it-helpdesk}
+      AI_AGENT_SLACK_NOTIFICATIONS_ENABLED: ${AI_AGENT_SLACK_NOTIFICATIONS_ENABLED:-true}
+      AI_AGENT_SLACK_MOCK_BASE_URL: http://slack-mock:8092
+      AI_AGENT_SLACK_MOCK_API_TOKEN: ${AI_AGENT_SLACK_MOCK_API_TOKEN:-mock-slack-dev-token}
+      AI_AGENT_SLACK_MOCK_CHANNEL: ${AI_AGENT_SLACK_MOCK_CHANNEL:-it-helpdesk}
+    volumes:
+      - ticket_data:/data
+    depends_on:
+      jira-mock:
+        condition: service_healthy
+      github-mock:
+        condition: service_healthy
+      slack-mock:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:
@@ -37,3 +136,7 @@ services:
 
 volumes:
   qdrant_data:
+  ticket_data:
+  jira_mock_data:
+  github_mock_data:
+  slack_mock_data:

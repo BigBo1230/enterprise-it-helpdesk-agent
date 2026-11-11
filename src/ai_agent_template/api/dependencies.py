@@ -7,6 +7,7 @@ from ai_agent_template.agent.service import AgentService
 from ai_agent_template.core.settings import Settings, get_settings
 from ai_agent_template.rag.service import EmptyRagRetriever, RagService
 from ai_agent_template.rag.vectorstore import build_vector_store
+from ai_agent_template.tickets.backend import TicketBackend, build_ticket_backend
 
 
 @lru_cache(maxsize=1)
@@ -28,3 +29,7 @@ def get_rag_service() -> RagService:
 
 def get_app_settings() -> Settings:
     return get_settings()
+
+
+def get_ticket_store() -> TicketBackend:
+    return build_ticket_backend(get_settings())

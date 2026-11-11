@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ai_agent_template.api.errors import register_exception_handlers
 from ai_agent_template.api.middleware import install_middleware
-from ai_agent_template.api.routes import agent, health, rag
+from ai_agent_template.api.routes import agent, health, rag, tickets
 from ai_agent_template.api.security import require_api_key
 from ai_agent_template.core import settings as settings_module
 from ai_agent_template.core.logging import configure_logging
@@ -43,6 +43,7 @@ def create_app() -> FastAPI:
             "authorization",
             "content-type",
             "x-api-key",
+            "idempotency-key",
             "x-request-id",
         ],
         expose_headers=[
@@ -59,4 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["health"])
     app.include_router(agent.router, prefix="/v1/agent", tags=["agent"], dependencies=protected)
     app.include_router(rag.router, prefix="/v1/rag", tags=["rag"], dependencies=protected)
+    app.include_router(
+        tickets.router, prefix="/v1/tickets", tags=["tickets"], dependencies=protected
+    )
     return app

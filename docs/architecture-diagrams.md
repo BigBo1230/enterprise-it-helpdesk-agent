@@ -30,6 +30,7 @@ flowchart LR
     ModelNode --> Provider{"Model Provider"}
     Provider --> Groq["Groq"]
     Provider --> OpenAI["OpenAI"]
+    Provider --> Bailian["Alibaba Bailian\nOpenAI-compatible API"]
 
     AgentService -.spans.-> OTEL["OTLP Collector"]
     RagService -.spans.-> OTEL
@@ -46,7 +47,7 @@ sequenceDiagram
     participant Graph as LangGraph
     participant RAG as RagService
     participant DB as Qdrant
-    participant LLM as Groq/OpenAI
+    participant LLM as Groq/OpenAI/Bailian
 
     User->>UI: Sends prompt
     UI->>Edge: POST /v1/agent/invoke (x-api-key, x-request-id?)
@@ -77,7 +78,7 @@ sequenceDiagram
     participant Edge as API Edge
     participant Service as AgentService
     participant Graph as LangGraph
-    participant LLM as Groq/OpenAI
+    participant LLM as Groq/OpenAI/Bailian
 
     User->>UI: Sends prompt
     UI->>Edge: POST /v1/agent/stream
@@ -165,14 +166,24 @@ flowchart TB
         API["api\nFastAPI\n:8000"]
         Qdrant["qdrant\nVector DB\n:6333 / :6334"]
         Volume[("qdrant_data volume")]
+        Worker["ticket-worker\noutbox delivery"]
+        Jira["jira-mock\n:8090"]
+        GitHub["github-mock\n:8091"]
+        Slack["slack-mock\n:8092"]
+        TicketDB[("ticket_data volume")]
     end
 
     Browser["Browser"] -->|"http://127.0.0.1:5173"| Frontend
-    Frontend -->|"VITE_API_BASE_URL\nVITE_API_KEY"| API
+    Frontend -->|"VITE_API_BASE_URL\nx-api-key from sessionStorage"| API
     API -->|"AI_AGENT_QDRANT_URL=http://qdrant:6333"| Qdrant
     Qdrant --> Volume
-    API -->|"GROQ_API_KEY / OPENAI_API_KEY"| Providers["LLM providers"]
+    API -->|"provider API key"| Providers["Groq / OpenAI / Bailian"]
     API -.optional.-> OTEL["OTLP collector\n(AI_AGENT_OTEL_ENABLED=true)"]
+    API --> TicketDB
+    Worker --> TicketDB
+    Worker --> Jira
+    Worker --> GitHub
+    Worker --> Slack
 ```
 
 ## Source Types

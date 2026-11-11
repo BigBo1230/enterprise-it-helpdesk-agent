@@ -1,12 +1,11 @@
 [project]
-name = "ai-agent-template"
+name = "enterprise-it-helpdesk-agent"
 version = "0.1.0"
-description = "Opinionated production-grade scaffold for FastAPI, LangChain, and LangGraph AI agents."
+description = "Tenant-aware IT helpdesk agent with RAG, ticket providers, and reliable notifications."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "AI Agent Template Contributors" }]
-keywords = ["ai-agent", "fastapi", "langchain", "langgraph", "llm", "agents"]
+keywords = ["it-helpdesk", "rag", "fastapi", "langgraph", "multi-tenant", "agents"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Framework :: FastAPI",
@@ -35,7 +34,7 @@ dependencies = [
   "pydantic-settings>=2.14.0,<3.0.0",
   "pypdf>=6.4.0,<7.0.0",
   "python-json-logger>=4.1.0,<5.0.0",
-  "qdrant-client>=1.16.0,<2.0.0",
+  "qdrant-client>=1.16.0,<1.17.0",
   "structlog>=25.5.0,<26.0.0",
   "tenacity>=9.0.0",
 ]
@@ -57,10 +56,6 @@ dev = [
   "pytest-cov>=7.1.0,<8.0.0",
   "ruff>=0.15.0,<1.0.0",
 ]
-
-[project.urls]
-Homepage = "https://github.com/your-org/ai-agent-template"
-Issues = "https://github.com/your-org/ai-agent-template/issues"
 
 [tool.uv]
 package = true

@@ -25,7 +25,9 @@ class FakeVectorStore:
         self._ids = list(existing.keys())
         self.documents = list(existing.values())
 
-    def similarity_search_with_score(self, query: str, k: int = 4) -> list[tuple[Document, float]]:
+    def similarity_search_with_score(
+        self, query: str, k: int = 4, **kwargs: object
+    ) -> list[tuple[Document, float]]:
         return [(document, 0.8) for document in self.documents[:k]]
 
 
@@ -99,3 +101,16 @@ def test_rag_reranker_hook_receives_results() -> None:
     assert captured["query"] == "anything"
     assert captured["count"] == 2
     assert [source.source for source in results] == ["b", "a"]
+
+
+def test_rag_tenant_documents_are_isolated() -> None:
+    settings = Settings(rag_chunk_size=200, rag_chunk_overlap=0)
+    service = RagService(settings=settings, vector_store=FakeVectorStore())
+    service.ingest_text(text="Alpha private policy", source="policy", tenant_id="demo")
+    service.ingest_text(text="Beta private policy", source="policy", tenant_id="beta")
+    assert [source.content for source in service.search("policy", tenant_id="demo")] == [
+        "Alpha private policy"
+    ]
+    assert [source.content for source in service.search("policy", tenant_id="beta")] == [
+        "Beta private policy"
+    ]

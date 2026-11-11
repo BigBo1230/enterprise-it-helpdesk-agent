@@ -22,10 +22,22 @@ class _ClientFactory(Protocol):
 
 
 class _StubService:
-    async def invoke(self, request: AgentInvokeRequest) -> AgentInvokeResponse:
+    async def invoke(
+        self,
+        request: AgentInvokeRequest,
+        tenant_id: str = "demo",
+        idempotency_key: str | None = None,
+        request_id: str | None = None,
+    ) -> AgentInvokeResponse:
         return AgentInvokeResponse(message=f"echo:{request.message}", thread_id=request.thread_id)
 
-    async def stream(self, request: AgentInvokeRequest) -> AsyncIterator[dict[str, Any]]:
+    async def stream(
+        self,
+        request: AgentInvokeRequest,
+        tenant_id: str = "demo",
+        idempotency_key: str | None = None,
+        request_id: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         yield {"type": "delta", "text": "hi"}
         yield {"type": "done", "thread_id": request.thread_id}
 
@@ -33,7 +45,8 @@ class _StubService:
 @pytest.fixture
 def make_client(monkeypatch: pytest.MonkeyPatch) -> _ClientFactory:
     def _factory(**settings_overrides: Any) -> TestClient:
-        settings = Settings(**settings_overrides)
+        monkeypatch.delenv("AI_AGENT_TENANT_API_KEYS", raising=False)
+        settings = Settings(_env_file=None, **{"tenant_api_keys": {}, **settings_overrides})
         # Middleware reads `get_settings()` at app construction.
         monkeypatch.setattr(settings_module, "get_settings", lambda: settings)
         app = create_app()
@@ -50,7 +63,7 @@ def test_request_id_is_echoed_back(make_client: _ClientFactory) -> None:
     response = client.post(
         "/v1/agent/invoke",
         json={"message": "hello"},
-        headers={"x-request-id": "req-abc"},
+        headers={"x-request-id": "req-abc", "Idempotency-Key": "req-abc"},
     )
     assert response.status_code == 200
     assert response.headers["x-request-id"] == "req-abc"
@@ -58,14 +71,18 @@ def test_request_id_is_echoed_back(make_client: _ClientFactory) -> None:
 
 def test_request_id_generated_when_missing(make_client: _ClientFactory) -> None:
     client = make_client(rate_limit_enabled=False)
-    response = client.post("/v1/agent/invoke", json={"message": "hello"})
+    response = client.post(
+        "/v1/agent/invoke", json={"message": "hello"}, headers={"Idempotency-Key": "req-generated"}
+    )
     assert response.status_code == 200
     assert response.headers["x-request-id"]
 
 
 def test_validation_error_returns_problem_envelope(make_client: _ClientFactory) -> None:
     client = make_client(rate_limit_enabled=False)
-    response = client.post("/v1/agent/invoke", json={"message": ""})
+    response = client.post(
+        "/v1/agent/invoke", json={"message": ""}, headers={"Idempotency-Key": "validation"}
+    )
     assert response.status_code == 422
     body = response.json()
     assert body["title"] == "Validation failed"
@@ -73,17 +90,26 @@ def test_validation_error_returns_problem_envelope(make_client: _ClientFactory) 
     assert body["request_id"]
 
 
+def test_agent_request_requires_idempotency_key(make_client: _ClientFactory) -> None:
+    client = make_client(rate_limit_enabled=False)
+    response = client.post("/v1/agent/invoke", json={"message": "hello"})
+    assert response.status_code == 422
+    assert "Idempotency-Key" in response.text
+
+
 def test_auth_required_when_keys_configured(make_client: _ClientFactory) -> None:
     client = make_client(rate_limit_enabled=False, auth_api_keys=["secret-1"])
 
-    unauth = client.post("/v1/agent/invoke", json={"message": "hi"})
+    unauth = client.post(
+        "/v1/agent/invoke", json={"message": "hi"}, headers={"Idempotency-Key": "unauth"}
+    )
     assert unauth.status_code == 401
     assert unauth.json()["title"] == "Unauthorized"
 
     ok = client.post(
         "/v1/agent/invoke",
         json={"message": "hi"},
-        headers={"x-api-key": "secret-1"},
+        headers={"x-api-key": "secret-1", "Idempotency-Key": "authorized"},
     )
     assert ok.status_code == 200
 
@@ -100,9 +126,15 @@ def test_rate_limit_engages_after_window_exhaustion(make_client: _ClientFactory)
         rate_limit_enabled=True, rate_limit_requests=2, rate_limit_window_seconds=60
     )
 
-    a = client.post("/v1/agent/invoke", json={"message": "1"})
-    b = client.post("/v1/agent/invoke", json={"message": "2"})
-    c = client.post("/v1/agent/invoke", json={"message": "3"})
+    a = client.post(
+        "/v1/agent/invoke", json={"message": "1"}, headers={"Idempotency-Key": "rate-1"}
+    )
+    b = client.post(
+        "/v1/agent/invoke", json={"message": "2"}, headers={"Idempotency-Key": "rate-2"}
+    )
+    c = client.post(
+        "/v1/agent/invoke", json={"message": "3"}, headers={"Idempotency-Key": "rate-3"}
+    )
 
     assert a.status_code == 200
     assert b.status_code == 200
@@ -123,12 +155,13 @@ def test_cors_preflight_succeeds_without_auth(make_client: _ClientFactory) -> No
         headers={
             "origin": "http://localhost:5173",
             "access-control-request-method": "POST",
-            "access-control-request-headers": "x-api-key,content-type",
+            "access-control-request-headers": "x-api-key,content-type,idempotency-key",
         },
     )
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert "x-api-key" in response.headers["access-control-allow-headers"].lower()
+    assert "idempotency-key" in response.headers["access-control-allow-headers"].lower()
 
 
 def test_cors_headers_present_on_rate_limited_response(make_client: _ClientFactory) -> None:
@@ -138,9 +171,11 @@ def test_cors_headers_present_on_rate_limited_response(make_client: _ClientFacto
         rate_limit_window_seconds=60,
         cors_allowed_origins=["http://localhost:5173"],
     )
-    headers = {"origin": "http://localhost:5173"}
+    headers = {"origin": "http://localhost:5173", "Idempotency-Key": "cors-1"}
     first = client.post("/v1/agent/invoke", json={"message": "1"}, headers=headers)
-    limited = client.post("/v1/agent/invoke", json={"message": "2"}, headers=headers)
+    limited = client.post(
+        "/v1/agent/invoke", json={"message": "2"}, headers={**headers, "Idempotency-Key": "cors-2"}
+    )
 
     assert first.status_code == 200
     assert limited.status_code == 429
@@ -151,7 +186,9 @@ def test_cors_headers_present_on_rate_limited_response(make_client: _ClientFacto
 
 def test_stream_endpoint_emits_sse_events(make_client: _ClientFactory) -> None:
     client = make_client(rate_limit_enabled=False)
-    with client.stream("POST", "/v1/agent/stream", json={"message": "hi"}) as response:
+    with client.stream(
+        "POST", "/v1/agent/stream", json={"message": "hi"}, headers={"Idempotency-Key": "stream-1"}
+    ) as response:
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
         body = b"".join(response.iter_bytes()).decode()

@@ -8,10 +8,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
-COPY src ./src
+RUN uv sync --no-dev --no-install-project
 
-RUN uv sync --no-dev --no-install-project && uv sync --no-dev
+COPY src ./src
+RUN uv sync --no-dev
 
 EXPOSE 8000
 
-CMD ["uv", "run", "fastapi", "run", "src/ai_agent_template/main.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--no-sync", "fastapi", "run", "src/ai_agent_template/main.py", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,4 +1,4 @@
-.PHONY: sync lint format typecheck test eval eval-offline check run up down \
+.PHONY: sync lint format typecheck test eval eval-offline eval-safety eval-rag check run up down \
         frontend-install frontend-dev frontend-build docker-build clean
 
 sync:
@@ -22,6 +22,12 @@ eval:
 eval-offline:
 	uv run python -m tests.evals.runner --offline
 
+eval-safety:
+	uv run python -m tests.evals.scenario_runner
+
+eval-rag:
+	uv run python -m tests.evals.rag_runner --tenant demo
+
 check: lint typecheck test
 
 run:
@@ -43,7 +49,7 @@ frontend-build:
 	cd frontend && npm run build
 
 docker-build:
-	docker build -t ai-agent-template:local .
+	docker build -t enterprise-it-helpdesk-agent:local .
 
 clean:
 	rm -rf .coverage .mypy_cache .pytest_cache .ruff_cache htmlcov dist \

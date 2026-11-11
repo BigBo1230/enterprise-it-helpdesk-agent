@@ -18,12 +18,21 @@ class AgentService:
     def __init__(self, graph: AgentGraph) -> None:
         self._graph = graph
 
-    async def invoke(self, request: AgentInvokeRequest) -> AgentInvokeResponse:
-        config = self._config(request.thread_id)
+    async def invoke(
+        self,
+        request: AgentInvokeRequest,
+        tenant_id: str = "demo",
+        idempotency_key: str | None = None,
+        request_id: str | None = None,
+    ) -> AgentInvokeResponse:
+        config = self._config(request.thread_id, tenant_id)
         with agent_span("agent.invoke", thread_id=request.thread_id):
             result = cast(
                 dict[str, Any],
-                await self._graph.ainvoke(initial_state(request.message), config=config),
+                await self._graph.ainvoke(
+                    initial_state(request.message, tenant_id, idempotency_key, request_id),
+                    config=config,
+                ),
             )
         messages = result.get("messages", [])
         sources = [source for source in result.get("sources", []) if isinstance(source, RagSource)]
@@ -34,13 +43,19 @@ class AgentService:
             sources=sources,
         )
 
-    async def stream(self, request: AgentInvokeRequest) -> AsyncIterator[dict[str, Any]]:
+    async def stream(
+        self,
+        request: AgentInvokeRequest,
+        tenant_id: str = "demo",
+        idempotency_key: str | None = None,
+        request_id: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Yield SSE-friendly events: token deltas, sources, and a final done event."""
-        config = self._config(request.thread_id)
+        config = self._config(request.thread_id, tenant_id)
         sources_emitted = False
         with agent_span("agent.stream", thread_id=request.thread_id):
             async for mode, chunk in self._graph.astream(
-                initial_state(request.message),
+                initial_state(request.message, tenant_id, idempotency_key, request_id),
                 config=config,
                 stream_mode=["updates", "messages"],
             ):
@@ -65,10 +80,10 @@ class AgentService:
         yield {"type": "done", "thread_id": request.thread_id}
 
     @staticmethod
-    def _config(thread_id: str | None) -> dict[str, Any] | None:
+    def _config(thread_id: str | None, tenant_id: str = "demo") -> dict[str, Any] | None:
         if not thread_id:
             return None
-        return {"configurable": {"thread_id": thread_id}}
+        return {"configurable": {"thread_id": f"{tenant_id}:{thread_id}"}}
 
 
 def _extract_sources(update: dict[str, Any]) -> list[RagSource]:
