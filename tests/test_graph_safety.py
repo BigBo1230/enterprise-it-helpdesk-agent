@@ -54,10 +54,7 @@ def test_preserves_escalation_claim_with_tool_evidence() -> None:
 
 
 def test_removes_english_retry_promise_without_tool_evidence() -> None:
-    answer = (
-        "The request could not be confirmed. "
-        "I will retry once using the same idempotency key."
-    )
+    answer = "The request could not be confirmed. I will retry once using the same idempotency key."
 
     sanitized = remove_unsupported_action_claims(answer, "Ticket service is unavailable.")
 
